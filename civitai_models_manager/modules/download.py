@@ -76,7 +76,7 @@ def download_model(
     model_id: int,
     model_details: Dict[str, Any],
     select: bool = False,
-) -> Optional[str]:
+) -> Tuple[Optional[str], bool]:
     model_name = model_details.get("name", f"Model_{model_id}")
     model_type = model_details.get("type", "unknown")
     model_meta = model_details.get("metadata", {})
@@ -84,7 +84,7 @@ def download_model(
 
     if not versions and not model_details.get("parent_id"):
         feedback_message(f"No versions available for model {model_name}.", "warning")
-        return None
+        return None, False
 
     if not select and not model_details.get("parent_id"):
         selected_version = versions[0]
@@ -103,12 +103,12 @@ def download_model(
                 f"Model {model_name} is a variant of {model_details['parent_name']} // Model ID: {model_details['parent_id']} \r Needs to be a parent model",
                 "warning",
             )
-            return None
+            return None, False
         selected_version = select_version(model_name, versions)
 
     if not selected_version:
         feedback_message(f"A version is not available for model {model_name}.", "error")
-        return None
+        return None, False
 
     model_folder = get_model_folder(MODELS_DIR, model_type, TYPES)
     model_path = os.path.join(
@@ -119,18 +119,15 @@ def download_model(
 
     if os.path.exists(model_path):
         if not check_for_upgrade(versions, model_path, selected_version):
-            feedback_message(
-                f"Model {model_name} already exists at {model_path}. Skipping download.",
-                "warning",
-            )
-            return None
+            return model_path, False  # Indicate that the download was skipped
 
     os.makedirs(os.path.dirname(model_path), exist_ok=True)
-    return download_file(
+    downloaded_path = download_file(
         f"{CIVITAI_DOWNLOAD}/{selected_version['id']}?token={CIVITAI_TOKEN}",
         model_path,
         model_name,
     )
+    return downloaded_path, True  # Indicate that the download was successful
 
 
 def download_file(url: str, path: str, desc: str) -> Optional[str]:
@@ -185,18 +182,23 @@ def download_file(url: str, path: str, desc: str) -> Optional[str]:
 
 
 def download_multiple_models(
-    identifiers: List[str], select: bool, **kwargs
-) -> List[Tuple[str, Optional[str]]]:
+    identifiers: List[str], select: bool, tail_paths: bool = False, **kwargs
+) -> List[Tuple[str, Optional[str], bool]]:
     results = []
     for identifier in identifiers[:MAX_CONCURRENT_DOWNLOADS]:
         result = download_single_model(identifier, select, **kwargs)
         results.append(result)
+    # Output all model paths at the end if tail_paths is enabled
+    if tail_paths:
+        for _, model_path, _ in results:
+            if model_path:
+                print(model_path)  # Print paths for both processed and skipped downloads
     return results
 
 
 def download_single_model(
     identifier: str, select: bool, **kwargs
-) -> Tuple[str, Optional[str]]:
+) -> Tuple[str, Optional[str], bool]:
     try:
         model_id = int(identifier)
         model_details = get_model_details(
@@ -206,7 +208,7 @@ def download_single_model(
         )
         types = kwargs.get("TYPES")
         if model_details:
-            model_path = download_model(
+            model_path, downloaded = download_model(
                 kwargs.get("MODELS_DIR"),
                 kwargs.get("CIVITAI_DOWNLOAD"),
                 kwargs.get("CIVITAI_TOKEN"),
@@ -216,27 +218,32 @@ def download_single_model(
                 select,
             )
             if model_path:
-                feedback_message(
-                    f"Model {identifier} downloaded successfully at: {model_path}",
-                    "info",
-                )
-                return identifier, model_path
-            else:
-                if model_path is not None:
+                if downloaded:
                     feedback_message(
-                        f"Failed to download the model {identifier}.", "error"
+                        f"Model {identifier} downloaded successfully at: {model_path}",
+                        "info",
                     )
+                else:
+                    feedback_message(
+                        f"Model {identifier} already exists at: {model_path}. Download skipped.",
+                        "warning",
+                    )
+                return identifier, model_path, downloaded
+            else:
+                feedback_message(
+                    f"Failed to download the model {identifier}.", "error"
+                )
         else:
             feedback_message(f"No model found with ID: {identifier}.", "error")
     except ValueError:
         feedback_message(
             f"Invalid model ID: {identifier}. Please enter a valid number.", "error"
         )
-    return identifier, None
+    return identifier, None, False
 
 
-def download_model_cli(identifiers: List[str], select: bool = False, **kwargs) -> None:
+def download_model_cli(identifiers: List[str], select: bool = False, tail_paths: bool = False, **kwargs) -> None:
     if not identifiers:
         feedback_message("No model identifiers provided.", "error")
         return
-    download_multiple_models(identifiers, select, **kwargs)
+    download_multiple_models(identifiers, select, tail_paths=tail_paths, **kwargs)

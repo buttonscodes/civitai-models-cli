@@ -285,11 +285,15 @@ def download_model_command(
     select: bool = typer.Option(
         False, "--select", "-s", help="Enable version selection for each model"
     ),
+    tail_paths: bool = typer.Option(
+        False, "--tail-paths", help="Print only the downloaded model paths at the end, one per line"
+    ),
 ):
     """
     Download up to 3 specific model variants by ID.
     :param identifiers: The IDs of the models to download (up to 3).
     :param select: Enable version selection for each model.
+    :param tail_paths: Print only the downloaded model paths at the end, one per line.
     :return: None
     """
     if len(identifiers) > 3:
@@ -303,6 +307,7 @@ def download_model_command(
     return download_model_cli(
         identifiers,
         select,
+        tail_paths=tail_paths,
         MODELS_DIR=MODELS_DIR,
         CIVITAI_MODELS=CIVITAI_MODELS,
         CIVITAI_DOWNLOAD=CIVITAI_DOWNLOAD,

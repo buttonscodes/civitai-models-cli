@@ -1,3 +1,13 @@
+# Fork
+
+I made this fork to add a feature "--tail-paths" I need for my script automation, to capture the paths of downloaded models, and possibly other changes as needed. 
+
+The output path can be captured as follows:
+
+output=$(civitai-models download ID --tail-paths | tail -n 1)
+echo "Downloaded to: $output"
+
+
 # Civitai Models CLI
 
 > [!NOTE]
